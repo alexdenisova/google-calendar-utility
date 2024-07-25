@@ -1,0 +1,19 @@
+[package]
+name = "calendar-update"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "calendar-update"
+path = "src/main.rs"
+
+[workspace]
+members = [".", "./crates/google-api"]
+
+[dependencies]
+chrono = { version = "0.4.38", features = ["serde"] }
+color-eyre = "0.6.3"
+email_address = "0.2.7"
+google-api = { path = "./crates/google-api" }
+jsonwebtoken = "9.3.0"
+serde = { version = "1.0.204", features = ["derive"] }

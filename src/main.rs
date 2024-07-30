@@ -17,12 +17,18 @@ fn main() -> AnyResult<()> {
 
     let classes = holi_client.list_user_classes()?;
     for class in classes {
-        let response = google_client.create_event(&class.to_google_post())?;
-        log::info!(
-            "Added {} at {} to calendar",
-            response.summary.unwrap(),
-            response.start.unwrap()
-        );
+        let event_matches =
+            google_client.list_events(class.to_google_list_params(&cli.google.sa_email))?;
+        if event_matches.is_empty() {
+            let response = google_client.create_event(&class.to_google_post())?;
+            log::info!(
+                "Added {} at {} to calendar",
+                response.summary.unwrap(),
+                response.start.unwrap()
+            );
+        } else {
+            log::debug!("{} at {} already in calendar", class.name, class.start);
+        }
     }
     Ok(())
 }

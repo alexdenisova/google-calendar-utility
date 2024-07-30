@@ -4,7 +4,7 @@ use reqwest::Url;
 
 use crate::api_models::{EventListResponse, EventPatch, EventPost, EventResponse};
 use crate::errors::{GoogleClientError, ToGoogleClientError};
-use crate::models::GoogleEvent;
+use crate::models::{GoogleEvent, UtcDateTime};
 
 const PAGE_SIZE: &str = "15";
 const GOOGLE_API_URL: &str = "https://www.googleapis.com";
@@ -33,15 +33,24 @@ impl GoogleEventsClient {
     pub(crate) fn list_events(
         &self,
         search_param: Option<String>,
+        start: Option<UtcDateTime>,
+        end: Option<UtcDateTime>,
     ) -> Result<Vec<GoogleEvent>, GoogleClientError> {
         let mut responses: Vec<GoogleEvent> = Vec::new();
         let mut next_page_token = None;
-        let now = chrono::offset::Utc::now().to_rfc3339();
+        let now = match start {
+            Some(time) => time,
+            None => chrono::offset::Utc::now(),
+        }
+        .to_rfc3339();
         loop {
             let mut query_params = Vec::from([
                 ("maxResults", PAGE_SIZE.to_owned()),
                 ("timeMin", now.clone()),
             ]);
+            if let Some(time) = end {
+                query_params.push(("timeMax", time.to_rfc3339()));
+            }
             if let Some(token) = next_page_token {
                 query_params.push(("pageToken", token));
             }
@@ -57,6 +66,7 @@ impl GoogleEventsClient {
                 .map_err(Into::<GoogleClientError>::into)?
                 .map_error()?
                 .json::<EventListResponse>()?;
+
             next_page_token = response.next_page_token.clone();
             responses.append(&mut response.items.into_iter().map(Into::into).collect());
             if next_page_token.is_none() {

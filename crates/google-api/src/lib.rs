@@ -6,7 +6,7 @@ use reqwest::{
 use errors::GoogleClientError;
 use events_client::GoogleEventsClient;
 use jwt::JsonWebToken;
-use models::{AccessToken, GoogleEvent, GoogleEventPatch, GoogleEventPost};
+use models::{AccessToken, GoogleEvent, GoogleEventListParams, GoogleEventPatch, GoogleEventPost};
 use oauth2_client::Oauth2Client;
 
 pub mod api_models;
@@ -24,10 +24,12 @@ pub struct GoogleClient {
 
 impl GoogleClient {
     pub fn new(
-        events_client: GoogleEventsClient,
+        mut events_client: GoogleEventsClient,
         jwt: JsonWebToken,
     ) -> Result<Self, GoogleClientError> {
         let access_token = Oauth2Client::new(&jwt)?.get_token()?;
+        let auth_headers = GoogleClient::auth_headers(&access_token);
+        events_client.auth_headers = auth_headers;
         Ok(GoogleClient {
             events_client,
             jwt,
@@ -47,7 +49,7 @@ impl GoogleClient {
         let token = Oauth2Client::new(&jwt)?.get_token()?;
         self.jwt = jwt;
         let auth_headers = GoogleClient::auth_headers(&token);
-        self.events_client.auth_headers = auth_headers.clone();
+        self.events_client.auth_headers = auth_headers;
         self.access_token = token;
         Ok(())
     }
@@ -60,13 +62,19 @@ impl GoogleClient {
 
     pub fn list_events(
         &mut self,
-        search_param: Option<String>,
+        params: GoogleEventListParams,
     ) -> Result<Vec<GoogleEvent>, GoogleClientError> {
         self.check_token()?;
-        let response = self.events_client.list_events(search_param.clone());
+        let response =
+            self.events_client
+                .list_events(params.search_param.clone(), params.start, params.end);
         if let Err(GoogleClientError::TokenExpired) = response {
             self.refresh_token()?;
-            return self.list_events(search_param);
+            let mut events = self.list_events(params.clone())?;
+            if let Some(email) = params.creator_email {
+                events.retain(|x| x.creator_email == email);
+            }
+            return Ok(events);
         }
         response
     }

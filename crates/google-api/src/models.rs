@@ -55,6 +55,14 @@ impl From<EventResponse> for GoogleEvent {
 }
 
 #[derive(Debug, Clone)]
+pub struct GoogleEventListParams {
+    pub search_param: Option<String>,
+    pub start: Option<UtcDateTime>,
+    pub end: Option<UtcDateTime>,
+    pub creator_email: Option<EmailAddress>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GoogleEventPost {
     pub summary: String,
     pub description: Option<String>,

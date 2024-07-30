@@ -1,0 +1,148 @@
+name: Rust CI
+
+on:
+  push:
+    tags: ["*.*.*"]
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    outputs:
+      stop_workflow: ${{ steps.update_version.outputs.stop_workflow }}
+      release_version: ${{ steps.update_version.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/update_version
+        id: update_version
+        with:
+          repo: $GITHUB_REPOSITORY
+          token: ${{ secrets.PERSONAL_TOKEN }}
+  build:
+    runs-on: ubuntu-latest
+    needs: update-version
+    if: >-
+      always()
+      && needs.update-version.outputs.stop_workflow != 'true'
+    env:
+      RUST_CHANNEL: x86_64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain if not cross-compiling
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.RUST_CHANNEL }}
+      - name: Install musl-tools on Linux
+        run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
+      - name: Cache target dir
+        uses: Swatinem/rust-cache@v2
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: true
+          command: install
+          args: --profile release --target ${{ env.RUST_CHANNEL }} --all-features --locked --path ${{ github.workspace }} --root dist
+      - name: Upload build artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: build
+          path: dist
+  create-tag:
+    runs-on: ubuntu-latest
+    needs:
+      - update-version
+      - build
+    if: >-
+      needs.update-version.outputs.stop_workflow != 'true'
+      && startsWith(github.ref, 'refs/tags/') != true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_TOKEN }}
+      - run: |
+          git tag ${{ needs.update-version.outputs.release_version }}
+          git push origin tag ${{ needs.update-version.outputs.release_version }}
+  publish-image:
+    runs-on: ubuntu-latest
+    needs:
+      - update-version
+      - build
+    if: >-
+      needs.update-version.outputs.stop_workflow != 'true'
+      && startsWith(github.ref, 'refs/tags/')
+    env:
+      REGISTRY: ghcr.io
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@master
+        with:
+          name: build
+          path: dist
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Package
+        run: docker build -t ${{ github.event.repository.name }} .
+      - name: Publish Package
+        run: |-
+          TAG="${{ needs.update-version.outputs.release_version }}"
+          docker tag ${{ github.event.repository.name }} ${REGISTRY}/${GITHUB_REPOSITORY}:${TAG}
+          docker push ${REGISTRY}/${GITHUB_REPOSITORY}:${TAG}
+
+          printf '%s:\n  image:\n    repository: %s\n    tag: %s\n' \
+          $(echo "${{ github.event.repository.name }}" | sed -E 's/-([a-z])/\U\1/g') \
+          "${REGISTRY}/${GITHUB_REPOSITORY}" \
+          "$TAG" \
+          > "${{ github.event.repository.name }}.values.yaml"
+      - name: Upload image artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: image-tag
+          path: "${{ github.event.repository.name }}.values.yaml"
+  push-values:
+    runs-on: ubuntu-latest
+    needs:
+      - update-version
+      - publish-image
+    if: >-
+      needs.update-version.outputs.stop_workflow != 'true'
+      && startsWith(github.ref, 'refs/tags/')
+    env:
+      VALUES_DIR: "values/google-calendar-utility"
+    steps:
+      - name: Checkout into deployment
+        uses: actions/checkout@v4
+        with:
+          repository: alexdenisova/deployment
+          token: ${{ secrets.PERSONAL_TOKEN }}
+      - name: Download image artifact
+        uses: actions/download-artifact@master
+        with:
+          name: image-tag
+          path: ${{ env.VALUES_DIR }}
+      - name: Commit report
+        run: |
+          git config --global user.name 'Action Push'
+          git config --global user.email 'alexadenisova@gmail.com'
+          git add -A
+          git commit -m "New ${{ github.event.repository.name }} version"
+          git push
+  clean-image-tags:
+    runs-on: ubuntu-latest
+    needs: publish-image
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/clean_image_tags
+        with:
+          package_name: ${{ github.event.repository.name }}
+          token: ${{ secrets.PERSONAL_TOKEN }}
+          leave: 2

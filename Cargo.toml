@@ -1,10 +1,10 @@
 [package]
-name = "calendar-update"
+name = "google-calendar-utility"
 version = "24.7.1"
 edition = "2021"
 
 [[bin]]
-name = "calendar-update"
+name = "google-calendar-utility"
 path = "src/main.rs"
 
 [workspace]

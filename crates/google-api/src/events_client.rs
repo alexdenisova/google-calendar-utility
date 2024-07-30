@@ -1,4 +1,3 @@
-use color_eyre::Result as AnyResult;
 use reqwest::blocking::{Client, ClientBuilder, Response};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::Url;
@@ -11,14 +10,14 @@ const PAGE_SIZE: &str = "15";
 const GOOGLE_API_URL: &str = "https://www.googleapis.com";
 
 #[derive(Debug)]
-pub struct EventsClient {
+pub struct GoogleEventsClient {
     client: Client,
     base_url: Url,
     pub(crate) auth_headers: HeaderMap,
 }
 
-impl EventsClient {
-    pub fn new(calendar_id: &str) -> AnyResult<Self> {
+impl GoogleEventsClient {
+    pub fn new(calendar_id: &str) -> Result<Self, GoogleClientError> {
         let mut headers = HeaderMap::new();
         headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
 
@@ -70,7 +69,7 @@ impl EventsClient {
     pub(crate) fn get_event(&self, event_id: &str) -> Result<GoogleEvent, GoogleClientError> {
         let response = self
             .client
-            .get(self.base_url.join(&format!("{event_id}"))?)
+            .get(self.base_url.join(event_id)?)
             .headers(self.auth_headers.clone())
             .send()?
             .map_error()?
@@ -97,7 +96,7 @@ impl EventsClient {
     ) -> Result<GoogleEvent, GoogleClientError> {
         let response = self
             .client
-            .patch(self.base_url.join(&format!("{event_id}"))?)
+            .patch(self.base_url.join(event_id)?)
             .headers(self.auth_headers.clone())
             .json(&event)
             .send()?
@@ -108,7 +107,7 @@ impl EventsClient {
 
     pub(crate) fn delete_event(&self, event_id: &str) -> Result<Response, GoogleClientError> {
         self.client
-            .delete(self.base_url.join(&format!("{event_id}"))?)
+            .delete(self.base_url.join(event_id)?)
             .headers(self.auth_headers.clone())
             .send()?
             .map_error()

@@ -1,15 +1,13 @@
-use api_models::{EventPatch, EventPost};
-use color_eyre::Result as AnyResult;
-
-use errors::GoogleClientError;
-use events_client::EventsClient;
-use jwt::JsonWebToken;
-use models::{AccessToken, GoogleEvent};
-use oauth2_client::Oauth2Client;
 use reqwest::{
     blocking::Response,
     header::{self, HeaderMap, HeaderValue},
 };
+
+use errors::GoogleClientError;
+use events_client::GoogleEventsClient;
+use jwt::JsonWebToken;
+use models::{AccessToken, GoogleEvent, GoogleEventPatch, GoogleEventPost};
+use oauth2_client::Oauth2Client;
 
 pub mod api_models;
 pub mod errors;
@@ -18,16 +16,19 @@ pub mod jwt;
 pub mod models;
 pub mod oauth2_client;
 
-pub struct GoogleAPI {
-    events_client: EventsClient,
+pub struct GoogleClient {
+    events_client: GoogleEventsClient,
     jwt: JsonWebToken,
     access_token: AccessToken,
 }
 
-impl GoogleAPI {
-    pub fn new(events_client: EventsClient, jwt: JsonWebToken) -> AnyResult<Self> {
+impl GoogleClient {
+    pub fn new(
+        events_client: GoogleEventsClient,
+        jwt: JsonWebToken,
+    ) -> Result<Self, GoogleClientError> {
         let access_token = Oauth2Client::new(&jwt)?.get_token()?;
-        Ok(GoogleAPI {
+        Ok(GoogleClient {
             events_client,
             jwt,
             access_token,
@@ -45,7 +46,7 @@ impl GoogleAPI {
         let jwt = self.jwt.clone().refresh();
         let token = Oauth2Client::new(&jwt)?.get_token()?;
         self.jwt = jwt;
-        let auth_headers = GoogleAPI::auth_headers(&token);
+        let auth_headers = GoogleClient::auth_headers(&token);
         self.events_client.auth_headers = auth_headers.clone();
         self.access_token = token;
         Ok(())
@@ -67,7 +68,7 @@ impl GoogleAPI {
             self.refresh_token()?;
             return self.list_events(search_param);
         }
-        return response;
+        response
     }
     pub fn get_event(&mut self, event_id: &str) -> Result<GoogleEvent, GoogleClientError> {
         self.check_token()?;
@@ -76,29 +77,32 @@ impl GoogleAPI {
             self.refresh_token()?;
             return self.get_event(event_id);
         }
-        return response;
+        response
     }
-    pub fn create_event(&mut self, event: &EventPost) -> Result<GoogleEvent, GoogleClientError> {
+    pub fn create_event(
+        &mut self,
+        event: &GoogleEventPost,
+    ) -> Result<GoogleEvent, GoogleClientError> {
         self.check_token()?;
-        let response = self.events_client.create_event(event);
+        let response = self.events_client.create_event(&event.into());
         if let Err(GoogleClientError::TokenExpired) = response {
             self.refresh_token()?;
             return self.create_event(event);
         }
-        return response;
+        response
     }
     pub fn update_event(
         &mut self,
         event_id: &str,
-        event: &EventPatch,
+        event: &GoogleEventPatch,
     ) -> Result<GoogleEvent, GoogleClientError> {
         self.check_token()?;
-        let response = self.events_client.update_event(event_id, event);
+        let response = self.events_client.update_event(event_id, &event.into());
         if let Err(GoogleClientError::TokenExpired) = response {
             self.refresh_token()?;
             return self.update_event(event_id, event);
         }
-        return response;
+        response
     }
     pub fn delete_event(&mut self, event_id: &str) -> Result<Response, GoogleClientError> {
         self.check_token()?;
@@ -107,6 +111,6 @@ impl GoogleAPI {
             self.refresh_token()?;
             return self.delete_event(event_id);
         }
-        return response;
+        response
     }
 }

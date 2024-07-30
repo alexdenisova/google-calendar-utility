@@ -8,12 +8,22 @@ name = "calendar-update"
 path = "src/main.rs"
 
 [workspace]
-members = [".", "./crates/google-api"]
+members = [".", "./crates/google-api", "crates/holi-yoga-api"]
 
 [dependencies]
+camino = "1.1.7"
 chrono = { version = "0.4.38", features = ["serde"] }
+chrono-tz = "0.9.0"
+clap = { version = "4.5.3", features = ["env", "derive"] }
 color-eyre = "0.6.3"
+dotenvy = "0.15.7"
 email_address = "0.2.7"
+fern = { version = "0.6.2", features = ["colored"] }
 google-api = { path = "./crates/google-api" }
+holi-yoga-api = { path = "./crates/holi-yoga-api" }
 jsonwebtoken = "9.3.0"
+log = "0.4.22"
+scraper = "0.19.1"
 serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.120"
+uuid = "1.10.0"

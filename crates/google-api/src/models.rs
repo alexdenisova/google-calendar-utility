@@ -1,7 +1,10 @@
 use chrono::{DateTime, Duration, Utc};
 use email_address::EmailAddress;
 
-use crate::{api_models::EventResponse, oauth2_client::TokenResponse};
+use crate::{
+    api_models::{EventPatch, EventPost, EventResponse, TimePost},
+    oauth2_client::TokenResponse,
+};
 
 pub type UtcDateTime = DateTime<Utc>;
 
@@ -47,6 +50,48 @@ impl From<EventResponse> for GoogleEvent {
             start: value.start.date_time,
             end: value.end.date_time,
             creator_email: value.creator.email,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GoogleEventPost {
+    pub summary: String,
+    pub description: Option<String>,
+    pub start: UtcDateTime,
+    pub end: UtcDateTime,
+}
+
+impl From<&GoogleEventPost> for EventPost {
+    fn from(value: &GoogleEventPost) -> Self {
+        EventPost {
+            summary: value.summary.clone(),
+            description: value.description.clone(),
+            start: TimePost {
+                date_time: value.start,
+            },
+            end: TimePost {
+                date_time: value.end,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GoogleEventPatch {
+    pub summary: Option<String>,
+    pub description: Option<String>,
+    pub start: Option<UtcDateTime>,
+    pub end: Option<UtcDateTime>,
+}
+
+impl From<&GoogleEventPatch> for EventPatch {
+    fn from(value: &GoogleEventPatch) -> Self {
+        EventPatch {
+            summary: value.summary.clone(),
+            description: value.description.clone(),
+            start: value.start.map(|date_time| TimePost { date_time }),
+            end: value.end.map(|date_time| TimePost { date_time }),
         }
     }
 }

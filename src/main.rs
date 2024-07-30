@@ -1,34 +1,28 @@
-use std::str::FromStr;
+mod google_event;
+mod settings;
 
+use clap::Parser;
 use color_eyre::Result as AnyResult;
-use email_address::EmailAddress;
-use google_api::{
-    api_models::{EventPost, TimePost},
-    events_client::EventsClient,
-    jwt::JsonWebToken,
-    GoogleAPI,
-};
+use dotenvy::dotenv;
+use google_event::IntoGoogleEvent;
+use settings::Cli;
 
 fn main() -> AnyResult<()> {
-    let kid = "".to_owned();
-    let private_key = r"".to_owned();
+    dotenv().ok();
+    let cli = Cli::parse();
+    cli.setup_logging()?;
 
-    let jwt = JsonWebToken::build(
-        kid.clone(),
-        EmailAddress::from_str("serviceaccount@gmail.com")?,
-        private_key.clone(),
-    )?;
-    let events_client = EventsClient::new("alexadenisova@gmail.com")?;
-    let mut google_api = GoogleAPI::new(events_client, jwt)?;
-    let now = chrono::offset::Utc::now();
-    let event = EventPost {
-        summary: "testing".to_owned(),
-        description: None,
-        start: TimePost { date_time: now },
-        end: TimePost { date_time: now },
-    };
-    let response = google_api.create_event(&event)?;
-    google_api.delete_event(&response.id)?;
-    println!("{:?}", response);
+    let mut google_client = cli.google_client()?;
+    let holi_client = cli.holi_client()?;
+
+    let classes = holi_client.list_user_classes()?;
+    for class in classes {
+        let response = google_client.create_event(&class.to_google_post())?;
+        log::info!(
+            "Added {} at {} to calendar",
+            response.summary.unwrap(),
+            response.start.unwrap()
+        );
+    }
     Ok(())
 }

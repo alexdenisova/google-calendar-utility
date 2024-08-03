@@ -1,9 +1,9 @@
 use color_eyre::Report as AnyError;
-use reqwest::{blocking::Response, StatusCode};
+use reqwest::{Response, StatusCode};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum HoliClientError {
+pub enum ClientError {
     #[error("Access token has expired.")]
     TokenExpired,
     #[error("Could not parse: {error}.")]
@@ -12,34 +12,34 @@ pub enum HoliClientError {
     Other { error: AnyError },
 }
 
-impl From<reqwest::Error> for HoliClientError {
+impl From<reqwest::Error> for ClientError {
     fn from(value: reqwest::Error) -> Self {
-        HoliClientError::Other {
+        ClientError::Other {
             error: value.into(),
         }
     }
 }
 
-impl From<url::ParseError> for HoliClientError {
+impl From<url::ParseError> for ClientError {
     fn from(value: url::ParseError) -> Self {
-        HoliClientError::Other {
+        ClientError::Other {
             error: value.into(),
         }
     }
 }
 
-pub trait ToHoliClientError {
-    fn map_error(self) -> Result<Self, HoliClientError>
+pub trait ToClientError {
+    fn map_error(self) -> Result<Self, ClientError>
     where
         Self: Sized;
 }
 
-impl ToHoliClientError for Response {
-    fn map_error(self) -> Result<Self, HoliClientError> {
+impl ToClientError for Response {
+    fn map_error(self) -> Result<Self, ClientError> {
         if let Err(err) = self.error_for_status_ref() {
             return match self.status() {
-                StatusCode::UNAUTHORIZED => Err(HoliClientError::TokenExpired),
-                _ => Err(HoliClientError::Other { error: err.into() }),
+                StatusCode::UNAUTHORIZED => Err(ClientError::TokenExpired),
+                _ => Err(ClientError::Other { error: err.into() }),
             };
         }
         Ok(self)
@@ -63,9 +63,9 @@ pub enum ClassParseError<'a> {
     Other { error: AnyError },
 }
 
-impl From<ClassParseError<'static>> for HoliClientError {
+impl From<ClassParseError<'static>> for ClientError {
     fn from(value: ClassParseError<'static>) -> Self {
-        HoliClientError::WrongFormat {
+        ClientError::WrongFormat {
             error: value.into(),
         }
     }

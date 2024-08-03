@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::errors::ClassParseError;
+use crate::api_clients::errors::ClassParseError;
 
 pub type RequestForm = HashMap<String, String>;
 

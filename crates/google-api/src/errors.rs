@@ -1,5 +1,5 @@
 use color_eyre::Report as AnyError;
-use reqwest::{blocking::Response, StatusCode};
+use reqwest::{Response, StatusCode};
 use thiserror::Error;
 
 #[derive(Error, Debug)]

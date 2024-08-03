@@ -1,6 +1,6 @@
-use reqwest::blocking::{Client, ClientBuilder, Response};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::Url;
+use reqwest::{Client, ClientBuilder, Response};
 
 use crate::api_models::{EventListResponse, EventPatch, EventPost, EventResponse};
 use crate::errors::{GoogleClientError, ToGoogleClientError};
@@ -30,7 +30,15 @@ impl GoogleEventsClient {
         })
     }
 
-    pub(crate) fn list_events(
+    pub(crate) fn update_auth_headers(&mut self, token: &str) {
+        let mut headers = HeaderMap::new();
+        let mut basic_auth = HeaderValue::from_str(&format!("Bearer {token}")).unwrap();
+        basic_auth.set_sensitive(true);
+        headers.insert(header::AUTHORIZATION, basic_auth);
+        self.auth_headers = headers;
+    }
+
+    pub(crate) async fn list_events(
         &self,
         search_param: Option<String>,
         start: Option<UtcDateTime>,
@@ -63,9 +71,11 @@ impl GoogleEventsClient {
                 .headers(self.auth_headers.clone())
                 .query(&query_params)
                 .send()
+                .await
                 .map_err(Into::<GoogleClientError>::into)?
                 .map_error()?
-                .json::<EventListResponse>()?;
+                .json::<EventListResponse>()
+                .await?;
 
             next_page_token = response.next_page_token.clone();
             responses.append(&mut response.items.into_iter().map(Into::into).collect());
@@ -76,30 +86,37 @@ impl GoogleEventsClient {
         Ok(responses)
     }
 
-    pub(crate) fn get_event(&self, event_id: &str) -> Result<GoogleEvent, GoogleClientError> {
+    pub(crate) async fn get_event(&self, event_id: &str) -> Result<GoogleEvent, GoogleClientError> {
         let response = self
             .client
             .get(self.base_url.join(event_id)?)
             .headers(self.auth_headers.clone())
-            .send()?
+            .send()
+            .await?
             .map_error()?
-            .json::<EventResponse>()?;
+            .json::<EventResponse>()
+            .await?;
         Ok(response.into())
     }
 
-    pub(crate) fn create_event(&self, event: &EventPost) -> Result<GoogleEvent, GoogleClientError> {
+    pub(crate) async fn create_event(
+        &self,
+        event: &EventPost,
+    ) -> Result<GoogleEvent, GoogleClientError> {
         let response = self
             .client
             .post(self.base_url.clone())
             .headers(self.auth_headers.clone())
             .json(&event)
-            .send()?
+            .send()
+            .await?
             .map_error()?
-            .json::<EventResponse>()?;
+            .json::<EventResponse>()
+            .await?;
         Ok(response.into())
     }
 
-    pub(crate) fn update_event(
+    pub(crate) async fn update_event(
         &self,
         event_id: &str,
         event: &EventPatch,
@@ -109,17 +126,20 @@ impl GoogleEventsClient {
             .patch(self.base_url.join(event_id)?)
             .headers(self.auth_headers.clone())
             .json(&event)
-            .send()?
+            .send()
+            .await?
             .map_error()?
-            .json::<EventResponse>()?;
+            .json::<EventResponse>()
+            .await?;
         Ok(response.into())
     }
 
-    pub(crate) fn delete_event(&self, event_id: &str) -> Result<Response, GoogleClientError> {
+    pub(crate) async fn delete_event(&self, event_id: &str) -> Result<Response, GoogleClientError> {
         self.client
             .delete(self.base_url.join(event_id)?)
             .headers(self.auth_headers.clone())
-            .send()?
+            .send()
+            .await?
             .map_error()
     }
 }

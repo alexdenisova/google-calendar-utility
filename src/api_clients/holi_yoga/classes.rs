@@ -1,13 +1,12 @@
 use chrono::{Datelike, Duration, NaiveDateTime, TimeZone, Utc};
 use scraper::{Html, Selector};
 
-use crate::{
-    consts::{
-        CLASSES_CSS_SELECTOR, CLASS_CSS_SELECTOR, CLASS_DATE_SELECTOR, CLASS_DURATION_SELECTOR,
-        CLASS_NAME_CSS_SELECTOR, CLASS_START_TIME_SELECTOR,
-    },
-    errors::ClassParseError,
-    models::Class,
+use crate::api_clients::errors::ClassParseError;
+use crate::api_clients::models::Class;
+
+use super::consts::{
+    CLASSES_CSS_SELECTOR, CLASS_CSS_SELECTOR, CLASS_DATE_SELECTOR, CLASS_DURATION_SELECTOR,
+    CLASS_NAME_CSS_SELECTOR, CLASS_START_TIME_SELECTOR,
 };
 
 pub fn parse_classes(

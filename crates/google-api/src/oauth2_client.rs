@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::Url;
+use reqwest::{Client, ClientBuilder};
 use serde::Deserialize;
 
 use crate::errors::{GoogleClientError, JWTError, ToGoogleClientError};
@@ -46,14 +46,16 @@ impl Oauth2Client {
         })
     }
 
-    pub fn get_token(&self) -> Result<AccessToken, GoogleClientError> {
+    pub async fn get_token(&self) -> Result<AccessToken, GoogleClientError> {
         let response: TokenResponse = self
             .client
             .post(self.base_url.clone())
             .form(&self.form_params)
-            .send()?
+            .send()
+            .await?
             .map_error()?
-            .json::<TokenResponse>()?;
+            .json::<TokenResponse>()
+            .await?;
         Ok(response.into())
     }
 }

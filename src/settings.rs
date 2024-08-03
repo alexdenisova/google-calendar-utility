@@ -1,3 +1,9 @@
+use std::sync::Arc;
+
+use crate::api_clients::errors::ClientError;
+use crate::api_clients::holi_yoga::holi_client::HoliClient;
+use crate::api_clients::plastilin::plastilin_client::PlastilinClient;
+use crate::GC;
 use camino::Utf8PathBuf;
 use chrono::prelude::Local;
 use clap::{Args, Parser};
@@ -9,9 +15,8 @@ use google_api::errors::GoogleClientError;
 use google_api::events_client::GoogleEventsClient;
 use google_api::jwt::JsonWebToken;
 use google_api::GoogleClient;
-use holi_yoga_api::errors::HoliClientError;
-use holi_yoga_api::holi_client::HoliClient;
 use log::LevelFilter;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 const DEFAULT_HOLI_API_KEY: &str = "63b92ce0-3a63-4de5-8ee0-2756b62a0190";
@@ -21,6 +26,8 @@ const DEFAULT_HOLI_CLUB_ID: &str = "3dc77e1c-434c-11ea-bbc1-0050568bac14";
 pub struct Cli {
     #[command(flatten)]
     pub google: GoogleArguments,
+    #[command(flatten)]
+    plastilin: PlastilinArguments,
     #[command(flatten)]
     holi_yoga: HoliYogaArguments,
     /// Set debug log level
@@ -68,24 +75,38 @@ pub struct HoliYogaArguments {
     club_id: Uuid,
 }
 
+#[derive(Debug, Args)]
+pub struct PlastilinArguments {
+    /// Token for authorization
+    #[arg(id = "plastilin-token", env = "GCU__PLASTILIN_TOKEN")]
+    token: String,
+}
+
+impl PlastilinArguments {
+    pub async fn client(&self) -> Result<PlastilinClient, ClientError> {
+        PlastilinClient::new(&self.token).await
+    }
+}
+
 impl HoliYogaArguments {
-    pub fn client(&self) -> Result<HoliClient, HoliClientError> {
+    pub async fn client(&self) -> Result<HoliClient, ClientError> {
         HoliClient::new(
             self.api_key,
             self.club_id,
             self.username.clone(),
             self.password.clone(),
         )
+        .await
     }
 }
 
 impl GoogleArguments {
-    pub fn client(&self) -> Result<GoogleClient, GoogleClientError> {
+    pub async fn client(&self) -> Result<GoogleClient, GoogleClientError> {
         let private_key: String =
             std::fs::read_to_string(&self.private_key).expect("Unable to read file");
         let jwt = JsonWebToken::build(self.key_id.clone(), self.sa_email.clone(), private_key)?;
         let events_client = GoogleEventsClient::new(&self.calendar_id)?;
-        GoogleClient::new(events_client, jwt)
+        GoogleClient::new(events_client, jwt).await
     }
 }
 
@@ -126,10 +147,13 @@ impl Cli {
         .apply()?;
         Ok(())
     }
-    pub fn google_client(&self) -> Result<GoogleClient, GoogleClientError> {
-        self.google.client()
+    pub async fn google_client(&self) -> Result<GC, GoogleClientError> {
+        Ok(Arc::new(Mutex::new(self.google.client().await?)))
     }
-    pub fn holi_client(&self) -> Result<HoliClient, HoliClientError> {
-        self.holi_yoga.client()
+    pub async fn holi_client(&self) -> Result<HoliClient, ClientError> {
+        self.holi_yoga.client().await
+    }
+    pub async fn plastilin_client(&self) -> Result<PlastilinClient, ClientError> {
+        self.plastilin.client().await
     }
 }

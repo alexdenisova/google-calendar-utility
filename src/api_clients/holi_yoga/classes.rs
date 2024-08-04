@@ -10,7 +10,7 @@ use super::consts::{
 };
 
 pub fn parse_classes(
-    html: Html,
+    html: &Html,
     time_zone: chrono_tz::Tz,
 ) -> Result<Vec<Class>, ClassParseError<'static>> {
     let classes_selector = Selector::parse(CLASSES_CSS_SELECTOR).unwrap();
@@ -81,7 +81,7 @@ pub fn parse_classes(
         let start = time_zone.from_local_datetime(&start).unwrap();
         let start = Utc.from_utc_datetime(&start.naive_utc());
 
-        let end = start + Duration::seconds(60 * duration_min as i64);
+        let end = start + Duration::seconds(60 * i64::from(duration_min));
         let class = Class {
             name: class_name,
             start,

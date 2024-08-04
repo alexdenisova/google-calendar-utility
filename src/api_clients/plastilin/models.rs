@@ -9,7 +9,7 @@ impl From<&ClassResponse> for Class {
         Self {
             name: value.activity.name.clone(),
             start: value.start_datetime,
-            end: value.start_datetime + Duration::minutes(value.duration_min as i64),
+            end: value.start_datetime + Duration::minutes(i64::from(value.duration_min)),
         }
     }
 }

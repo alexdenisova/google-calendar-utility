@@ -95,7 +95,7 @@ impl ClassCRUD for HoliClient {
             .await?;
 
         parse_classes(
-            Html::parse_document(&response.message),
+            &Html::parse_document(&response.message),
             response.time_zone(&self.club_id)?,
         )
         .map_err(Into::into)

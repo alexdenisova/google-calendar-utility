@@ -17,7 +17,7 @@ pub struct PlastilinClient {
 }
 
 impl PlastilinClient {
-    pub async fn new(token: &str) -> Result<Self, ClientError> {
+    pub fn new(token: &str) -> Result<Self, ClientError> {
         let mut headers = HeaderMap::new();
         headers.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
         headers.insert(
@@ -48,7 +48,7 @@ impl ClassCRUD for PlastilinClient {
             .json::<ScheduleListResponse>()
             .await?;
         if let Some(schedules) = response.schedules.first() {
-            return Ok(schedules.schedule.iter().map(|x| x.into()).collect());
+            return Ok(schedules.schedule.iter().map(Into::into).collect());
         }
         Ok(Vec::new())
     }

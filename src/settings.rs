@@ -83,8 +83,8 @@ pub struct PlastilinArguments {
 }
 
 impl PlastilinArguments {
-    pub async fn client(&self) -> Result<PlastilinClient, ClientError> {
-        PlastilinClient::new(&self.token).await
+    pub fn client(&self) -> Result<PlastilinClient, ClientError> {
+        PlastilinClient::new(&self.token)
     }
 }
 
@@ -153,7 +153,7 @@ impl Cli {
     pub async fn holi_client(&self) -> Result<HoliClient, ClientError> {
         self.holi_yoga.client().await
     }
-    pub async fn plastilin_client(&self) -> Result<PlastilinClient, ClientError> {
-        self.plastilin.client().await
+    pub fn plastilin_client(&self) -> Result<PlastilinClient, ClientError> {
+        self.plastilin.client()
     }
 }

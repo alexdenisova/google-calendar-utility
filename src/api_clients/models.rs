@@ -27,7 +27,7 @@ impl Display for Class {
 impl Class {
     pub fn to_google_post(&self) -> GoogleEventPost {
         GoogleEventPost {
-            summary: self.name.to_owned(),
+            summary: self.name.clone(),
             description: None,
             start: self.start,
             end: self.end,
@@ -36,7 +36,7 @@ impl Class {
 
     pub fn to_google_list_params(&self, creator_email: &EmailAddress) -> GoogleEventListParams {
         GoogleEventListParams {
-            search_param: Some(self.name.to_owned()),
+            search_param: Some(self.name.clone()),
             start: Some(self.start),
             end: Some(self.end),
             creator_email: Some(creator_email.to_owned()),

@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::module_name_repetitions)]
 mod api_clients;
 mod settings;
 
@@ -24,7 +27,7 @@ async fn main() -> AnyResult<()> {
 
     let google_client = cli.google_client().await?;
     let holi_client = cli.holi_client().await?;
-    let plastilin_client = cli.plastilin_client().await?;
+    let plastilin_client = cli.plastilin_client()?;
 
     let tasks = vec![
         task::spawn(sync_google_calendar(

@@ -8,6 +8,8 @@ pub enum ClientError {
     TokenExpired,
     #[error("Could not parse: {error}.")]
     WrongFormat { error: AnyError },
+    #[error("Item with id {id} already exists.")]
+    AlreadyExists { id: String },
     #[error("Unexpected error: {error}.")]
     Other { error: AnyError },
 }
@@ -22,20 +24,28 @@ impl From<reqwest::Error> for ClientError {
 
 impl From<url::ParseError> for ClientError {
     fn from(value: url::ParseError) -> Self {
-        ClientError::Other {
+        ClientError::WrongFormat {
+            error: value.into(),
+        }
+    }
+}
+
+impl From<uuid::Error> for ClientError {
+    fn from(value: uuid::Error) -> Self {
+        ClientError::WrongFormat {
             error: value.into(),
         }
     }
 }
 
 pub trait ToClientError {
-    fn map_error(self) -> Result<Self, ClientError>
+    fn map_error(self, id: Option<String>) -> Result<Self, ClientError>
     where
         Self: Sized;
 }
 
 impl ToClientError for Response {
-    fn map_error(self) -> Result<Self, ClientError> {
+    fn map_error(self, _id: Option<String>) -> Result<Self, ClientError> {
         if let Err(err) = self.error_for_status_ref() {
             return match self.status() {
                 StatusCode::UNAUTHORIZED => Err(ClientError::TokenExpired),
@@ -53,6 +63,11 @@ pub enum ClassParseError<'a> {
         field: String,
         css_selector: &'a str,
     },
+    #[error("Could not parse {css_selector} element: missing {attribute} html attribute.")]
+    MissingHtmlAttribute {
+        css_selector: String,
+        attribute: String,
+    },
     #[error("Could not find {field} in response json.")]
     MissingJsonField { field: String },
     #[error("Could not parse {field}: expected format {expected}.")]
@@ -66,6 +81,14 @@ pub enum ClassParseError<'a> {
 impl From<ClassParseError<'static>> for ClientError {
     fn from(value: ClassParseError<'static>) -> Self {
         ClientError::WrongFormat {
+            error: value.into(),
+        }
+    }
+}
+
+impl From<chrono::ParseError> for ClassParseError<'static> {
+    fn from(value: chrono::ParseError) -> Self {
+        ClassParseError::Other {
             error: value.into(),
         }
     }

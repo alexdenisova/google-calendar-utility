@@ -1,18 +1,19 @@
-use std::collections::HashMap;
-
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::Url;
 use reqwest::{Client, ClientBuilder};
 use scraper::Html;
 use uuid::Uuid;
 
-use crate::api_clients::models::Class;
+use crate::api_clients::holi_yoga::api_models::{HoliResponseTrait, HoliScheduleResponse};
+use crate::api_clients::holi_yoga::parse::parse_schedule;
+use crate::api_clients::models::{Class, UtcDateTime};
 use crate::api_clients::ClassCRUD;
 
 use super::api_models::{
-    HoliLoginData, HoliLoginResponse, HoliMethods, HoliRequestData, HoliResponse, RequestForm,
+    HoliLoginData, HoliLoginResponse, HoliMethods, HoliRequestData, HoliUserClassResponse,
+    RequestForm,
 };
-use super::classes::parse_classes;
+use super::parse::parse_user_classes;
 use crate::api_clients::errors::{ClientError, ToClientError};
 
 const HOLI_API_URL: &str = "https://reservi.ru/api-fit1c/json/v2/";
@@ -40,8 +41,8 @@ impl HoliClient {
             HeaderValue::from_static("application/x-www-form-urlencoded"),
         );
 
-        let mut base_form = HashMap::new();
-        base_form.insert("api_key".to_owned(), api_key.to_string());
+        let mut base_form = RequestForm::new();
+        base_form.insert("api_key", &api_key.to_string());
 
         let client = ClientBuilder::new().default_headers(headers).build()?;
         let mut holi_client = Self {
@@ -59,45 +60,113 @@ impl HoliClient {
         Ok(holi_client)
     }
 
-    pub async fn login(&mut self) -> Result<(), ClientError> {
+    async fn login(&mut self) -> Result<(), ClientError> {
         let response = self
             .client
             .post(self.base_url.clone())
-            .form(&self.login_info.form())
+            .form(self.login_info.form().unwrap())
             .send()
             .await?
-            .map_error()?
+            .map_error(None)?
             .json::<HoliLoginResponse>()
             .await?;
-        self.base_form
-            .insert("params[token]".to_owned(), response.token);
+        self.base_form.insert_param("token", &response.token);
         Ok(())
     }
-}
 
-impl ClassCRUD for HoliClient {
-    async fn list_user_classes(&self) -> Result<Vec<Class>, ClientError> {
+    async fn list_user_classes(&self) -> Result<HoliUserClassResponse, ClientError> {
         let mut request_form = HoliRequestData {
             method: HoliMethods::GetUserClasses,
             app_id: None,
         }
         .form();
-        request_form.extend(self.base_form.clone());
+        request_form.extend(&self.base_form);
         log::debug!("List user classes form: {:?}", request_form);
+        self.client
+            .post(self.base_url.clone())
+            .form(request_form.unwrap())
+            .send()
+            .await?
+            .map_error(None)?
+            .json::<HoliUserClassResponse>()
+            .await?
+            .map_error(None)
+    }
+
+    async fn get_day_schedule(
+        &self,
+        day: &UtcDateTime,
+    ) -> Result<HoliScheduleResponse, ClientError> {
+        let mut request_form = HoliRequestData {
+            method: HoliMethods::GetSchedule,
+            app_id: None,
+        }
+        .form();
+        request_form.extend(&self.base_form);
+        request_form.insert_param("show_type", "day");
+        request_form.insert_param("filter_day", &day.timestamp().to_string());
+        log::debug!("Get day schedule form: {:?}", request_form);
+        Ok(self
+            .client
+            .post(self.base_url.clone())
+            .form(request_form.unwrap())
+            .send()
+            .await?
+            .map_error(None)?
+            .json::<HoliScheduleResponse>()
+            .await?)
+    }
+
+    async fn post_user_class(&self, class_id: Uuid) -> Result<HoliUserClassResponse, ClientError> {
+        let mut request_form = HoliRequestData {
+            method: HoliMethods::SignUp,
+            app_id: Some(class_id),
+        }
+        .form();
+        request_form.extend(&self.base_form);
+        log::debug!("Sign up form: {:?}", request_form);
         let response = self
             .client
             .post(self.base_url.clone())
-            .form(&request_form)
+            .form(request_form.unwrap())
             .send()
             .await?
-            .map_error()?
-            .json::<HoliResponse>()
-            .await?;
+            .map_error(None)?
+            .json::<HoliUserClassResponse>()
+            .await?
+            .map_error(Some(class_id.to_string()))?;
+        log::debug!("Sign up response: {:?}", response);
+        Ok(response)
+    }
+}
 
-        parse_classes(
-            &Html::parse_document(&response.message),
+impl ClassCRUD for HoliClient {
+    fn name() -> String {
+        "Holi Yoga".to_owned()
+    }
+
+    async fn get_user_classes(&self) -> Result<Vec<Class>, ClientError> {
+        let response = self.list_user_classes().await?;
+        parse_user_classes(
+            &Html::parse_document(&response.result),
             response.time_zone(&self.club_id)?,
         )
         .map_err(Into::into)
+    }
+
+    async fn list_day_classes(&self, day: &UtcDateTime) -> Result<Vec<Class>, ClientError> {
+        let response = self.get_day_schedule(day).await?;
+        parse_schedule(
+            &Html::parse_document(&response.slider.schedule_html),
+            day.date_naive(),
+            response.time_zone(&self.club_id)?,
+        )
+        .map_err(Into::into)
+    }
+
+    async fn sign_up_for_class(&self, class: &Class) -> Result<(), ClientError> {
+        self.post_user_class(Uuid::parse_str(&class.id)?).await?;
+        log::info!("Signed up for {class}");
+        Ok(())
     }
 }

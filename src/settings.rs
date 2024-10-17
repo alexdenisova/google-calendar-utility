@@ -3,10 +3,11 @@ use std::sync::Arc;
 use crate::api_clients::errors::ClientError;
 use crate::api_clients::holi_yoga::holi_client::HoliClient;
 use crate::api_clients::plastilin::plastilin_client::PlastilinClient;
+use crate::models::SignUpConfig;
 use crate::GC;
 use camino::Utf8PathBuf;
 use chrono::prelude::Local;
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 use color_eyre::Result as AnyResult;
 use email_address::EmailAddress;
 use fern::colors::{Color, ColoredLevelConfig};
@@ -22,17 +23,41 @@ use uuid::Uuid;
 const DEFAULT_HOLI_API_KEY: &str = "63b92ce0-3a63-4de5-8ee0-2756b62a0190";
 const DEFAULT_HOLI_CLUB_ID: &str = "3dc77e1c-434c-11ea-bbc1-0050568bac14";
 
+const DEFAULT_PLASTILIN_CLUB_ID: &str = "1820";
+
 #[derive(Debug, Parser)]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
     #[command(flatten)]
-    pub google: GoogleArguments,
+    plastilin: Option<PlastilinArguments>,
     #[command(flatten)]
-    plastilin: PlastilinArguments,
-    #[command(flatten)]
-    holi_yoga: HoliYogaArguments,
-    /// Set debug log level
+    holi_yoga: Option<HoliYogaArguments>,
     #[arg(long, short = 'd', default_value = "false", env = "GCU__DEBUG")]
     debug: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    #[command(name = "sign-up", about = "Sign up for classes")]
+    SignUp(SignUpConfigPath),
+    #[command(name = "sync", about = "Update classes in google calendar")]
+    SyncCalendars(GoogleArguments),
+}
+
+#[derive(Debug, Args)]
+pub struct SignUpConfigPath {
+    /// Path to sign-up config
+    #[arg(long = "sign-up-config", env = "GCU__SIGN_UP_CONFIG")]
+    pub config_path: Utf8PathBuf,
+}
+
+impl SignUpConfigPath {
+    pub fn parse(&self) -> AnyResult<SignUpConfig> {
+        Ok(serde_yaml::from_reader::<_, SignUpConfig>(
+            std::fs::File::open(&self.config_path)?,
+        )?)
+    }
 }
 
 #[derive(Debug, Args)]
@@ -80,11 +105,20 @@ pub struct PlastilinArguments {
     /// Token for authorization
     #[arg(id = "plastilin-token", env = "GCU__PLASTILIN_TOKEN")]
     token: String,
+    /// Plastilin club id
+    #[arg(id = "plastilin-club-id", env = "GCU__PLASTILIN_CLUB_ID", default_value = DEFAULT_PLASTILIN_CLUB_ID, index = 6)]
+    club_id: u16,
 }
 
-impl PlastilinArguments {
-    pub fn client(&self) -> Result<PlastilinClient, ClientError> {
-        PlastilinClient::new(&self.token)
+impl GoogleArguments {
+    pub async fn client(&self) -> Result<GC, GoogleClientError> {
+        let private_key: String =
+            std::fs::read_to_string(&self.private_key).expect("Unable to read file");
+        let jwt = JsonWebToken::build(self.key_id.clone(), self.sa_email.clone(), private_key)?;
+        let events_client = GoogleEventsClient::new(&self.calendar_id)?;
+        Ok(Arc::new(Mutex::new(
+            GoogleClient::new(events_client, jwt).await?,
+        )))
     }
 }
 
@@ -100,13 +134,9 @@ impl HoliYogaArguments {
     }
 }
 
-impl GoogleArguments {
-    pub async fn client(&self) -> Result<GoogleClient, GoogleClientError> {
-        let private_key: String =
-            std::fs::read_to_string(&self.private_key).expect("Unable to read file");
-        let jwt = JsonWebToken::build(self.key_id.clone(), self.sa_email.clone(), private_key)?;
-        let events_client = GoogleEventsClient::new(&self.calendar_id)?;
-        GoogleClient::new(events_client, jwt).await
+impl PlastilinArguments {
+    pub fn client(&self) -> Result<PlastilinClient, ClientError> {
+        PlastilinClient::new(&self.token, self.club_id)
     }
 }
 
@@ -147,13 +177,16 @@ impl Cli {
         .apply()?;
         Ok(())
     }
-    pub async fn google_client(&self) -> Result<GC, GoogleClientError> {
-        Ok(Arc::new(Mutex::new(self.google.client().await?)))
+    pub async fn holi_client(&self) -> Result<Option<HoliClient>, ClientError> {
+        Ok(match &self.holi_yoga {
+            Some(args) => Some(args.client().await?),
+            None => None,
+        })
     }
-    pub async fn holi_client(&self) -> Result<HoliClient, ClientError> {
-        self.holi_yoga.client().await
-    }
-    pub fn plastilin_client(&self) -> Result<PlastilinClient, ClientError> {
-        self.plastilin.client()
+    pub fn plastilin_client(&self) -> Result<Option<PlastilinClient>, ClientError> {
+        Ok(match &self.plastilin {
+            Some(args) => Some(args.client()?),
+            None => None,
+        })
     }
 }

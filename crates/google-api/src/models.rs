@@ -54,6 +54,15 @@ impl From<EventResponse> for GoogleEvent {
     }
 }
 
+impl GoogleEvent {
+    pub fn summary(&self) -> String {
+        self.summary.clone().unwrap_or("\"\"".to_owned())
+    }
+    pub fn start(&self) -> String {
+        self.start.map(|s| s.to_string()).unwrap_or("-".to_owned())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GoogleEventListParams {
     pub search_param: Option<String>,

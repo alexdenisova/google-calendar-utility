@@ -1,10 +1,7 @@
-use std::sync::Arc;
-
 use crate::api_clients::errors::ClientError;
 use crate::api_clients::holi_yoga::holi_client::HoliClient;
 use crate::api_clients::plastilin::plastilin_client::PlastilinClient;
 use crate::models::SignUpConfig;
-use crate::GC;
 use camino::Utf8PathBuf;
 use chrono::prelude::Local;
 use clap::{Args, Parser, Subcommand};
@@ -17,7 +14,6 @@ use google_api::events_client::GoogleEventsClient;
 use google_api::jwt::JsonWebToken;
 use google_api::GoogleClient;
 use log::LevelFilter;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 const DEFAULT_HOLI_API_KEY: &str = "63b92ce0-3a63-4de5-8ee0-2756b62a0190";
@@ -111,14 +107,12 @@ pub struct PlastilinArguments {
 }
 
 impl GoogleArguments {
-    pub async fn client(&self) -> Result<GC, GoogleClientError> {
+    pub async fn client(&self) -> Result<GoogleClient, GoogleClientError> {
         let private_key: String =
             std::fs::read_to_string(&self.private_key).expect("Unable to read file");
         let jwt = JsonWebToken::build(self.key_id.clone(), self.sa_email.clone(), private_key)?;
         let events_client = GoogleEventsClient::new(&self.calendar_id)?;
-        Ok(Arc::new(Mutex::new(
-            GoogleClient::new(events_client, jwt).await?,
-        )))
+        GoogleClient::new(events_client, jwt).await
     }
 }
 

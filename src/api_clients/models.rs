@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use chrono::{DateTime, Local, Utc};
 use email_address::EmailAddress;
-use google_api::models::{GoogleEventListParams, GoogleEventPost};
+use google_api::models::{GoogleEvent, GoogleEventListParams, GoogleEventPost};
 
 pub type UtcDateTime = DateTime<Utc>;
 
@@ -21,6 +21,19 @@ impl PartialEq for Class {
             && self.instructor == other.instructor
             && self.start == other.start
             && self.end == other.end
+    }
+}
+
+impl PartialEq<&GoogleEvent> for &Class {
+    fn eq(&self, other: &&GoogleEvent) -> bool {
+        if let Some(name) = &other.summary {
+            if let Some(start) = other.start {
+                if let Some(end) = other.end {
+                    return self.name.eq(name) && self.start == start && self.end == end;
+                }
+            }
+        }
+        false
     }
 }
 

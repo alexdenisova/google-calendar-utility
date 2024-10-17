@@ -1,3 +1,4 @@
+use async_recursion::async_recursion;
 use reqwest::Response;
 
 use errors::GoogleClientError;
@@ -49,9 +50,10 @@ impl GoogleClient {
         Ok(())
     }
 
+    #[async_recursion]
     pub async fn list_events(
         &mut self,
-        params: GoogleEventListParams,
+        params: &GoogleEventListParams,
     ) -> Result<Vec<GoogleEvent>, GoogleClientError> {
         self.check_token().await?;
         let response = self
@@ -60,16 +62,14 @@ impl GoogleClient {
             .await;
         if let Err(GoogleClientError::TokenExpired) = response {
             self.refresh_token().await?;
-            let mut events = self
-                .events_client
-                .list_events(params.search_param.clone(), params.start, params.end)
-                .await?;
-            if let Some(email) = params.creator_email {
-                events.retain(|x| x.creator_email == email);
+            return self.list_events(params).await;
+        } else {
+            let mut events = response?;
+            if let Some(email) = &params.creator_email {
+                events.retain(|x| x.creator_email.eq(email));
             }
             return Ok(events);
         }
-        response
     }
     pub async fn get_event(&mut self, event_id: &str) -> Result<GoogleEvent, GoogleClientError> {
         self.check_token().await?;

@@ -12,7 +12,7 @@ pub struct SignUpConfig {
     #[serde(default = "default_tz")]
     pub timezone: Tz,
     #[serde(default)]
-    pub offset_weeks: u8, // sign up to classes in that will be in <offset_weeks> weeks
+    pub offset_weeks: u8, // sign up to classes that will be in <offset_weeks> weeks
     #[serde(default)]
     pub holi_yoga: Vec<WeeklyClass>,
     #[serde(default)]

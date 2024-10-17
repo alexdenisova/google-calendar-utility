@@ -98,8 +98,7 @@ jobs:
           docker tag ${{ github.event.repository.name }} ${REGISTRY}/${GITHUB_REPOSITORY}:${TAG}
           docker push ${REGISTRY}/${GITHUB_REPOSITORY}:${TAG}
 
-          printf '%s:\n  image:\n    repository: %s\n    tag: %s\n' \
-          $(echo "${{ github.event.repository.name }}" | sed -E 's/-([a-z])/\U\1/g') \
+          printf 'image:\n  repository: %s\n  tag: %s\n' \
           "${REGISTRY}/${GITHUB_REPOSITORY}" \
           "$TAG" \
           > "${{ github.event.repository.name }}.values.yaml"

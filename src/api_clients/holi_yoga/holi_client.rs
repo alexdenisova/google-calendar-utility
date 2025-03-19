@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::Url;
 use reqwest::{Client, ClientBuilder};
@@ -7,7 +8,7 @@ use uuid::Uuid;
 use crate::api_clients::holi_yoga::api_models::{HoliResponseTrait, HoliScheduleResponse};
 use crate::api_clients::holi_yoga::parse::parse_schedule;
 use crate::api_clients::models::{Class, UtcDateTime};
-use crate::api_clients::ClassCRUD;
+use crate::api_clients::StudioCRUD;
 
 use super::api_models::{
     HoliLoginData, HoliLoginResponse, HoliMethods, HoliRequestData, HoliUserClassResponse,
@@ -140,8 +141,9 @@ impl HoliClient {
     }
 }
 
-impl ClassCRUD for HoliClient {
-    fn name() -> String {
+#[async_trait]
+impl StudioCRUD for HoliClient {
+    fn name(&self) -> String {
         "Holi Yoga".to_owned()
     }
 

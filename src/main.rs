@@ -6,16 +6,13 @@ mod models;
 mod settings;
 
 use chrono::{Duration, Utc};
-use chrono_tz::Tz;
 use clap::Parser;
-use color_eyre::{eyre::OptionExt, Result as AnyResult};
+use color_eyre::Result as AnyResult;
 use dotenvy::dotenv;
 use email_address::EmailAddress;
-use futures::future::join_all;
-use models::PotentialClass;
-use tokio::task;
+use models::SignUpConfig;
 
-use api_clients::{models::Class, ClassCRUD};
+use api_clients::{models::Class, StudioCRUD};
 use google_api::{
     models::{GoogleEvent, GoogleEventListParams},
     GoogleClient,
@@ -28,87 +25,28 @@ async fn main() -> AnyResult<()> {
     let cli = Cli::parse();
     cli.setup_logging()?;
 
-    let holi_client = cli.holi_client().await?;
-    let plastilin_client = cli.plastilin_client()?;
+    let clients = cli.clients().await?;
 
     match cli.command {
         Commands::SignUp(config) => {
-            let mut tasks = Vec::new();
             let config = config.parse()?;
-            let holi_classes = config.holi_classes();
-            let plastilin_classes = config.plastilin_classes();
-            if !holi_classes.is_empty() {
-                let holi_client = holi_client.ok_or_eyre("Holi Yoga args missing.")?;
-                tasks.push(task::spawn(sign_up(
-                    holi_client,
-                    holi_classes,
-                    config.timezone,
-                )));
+            for client in clients {
+                sign_up(&*client, &config).await;
             }
-            if !plastilin_classes.is_empty() {
-                let plastilin_client = plastilin_client.ok_or_eyre("Holi Yoga args missing.")?;
-                tasks.push(task::spawn(sign_up(
-                    plastilin_client,
-                    plastilin_classes,
-                    config.timezone,
-                )));
-            }
-            join_all(tasks).await;
         }
         Commands::SyncCalendars(google_args) => {
             let mut google_client = google_args.client().await?;
-            let now = Utc::now();
-            let mut google_classes = google_client
-                .list_events(&GoogleEventListParams {
-                    search_param: None,
-                    start: Some(now),
-                    end: Some(now + Duration::weeks(3)),
-                    creator_email: Some(google_args.sa_email.clone()),
-                })
-                .await?;
-            if let Some(client) = holi_client {
-                sync_google_calendar(
-                    &mut google_client,
-                    &google_args.sa_email,
-                    client,
-                    &mut google_classes,
-                )
-                .await;
-            }
-            if let Some(client) = plastilin_client {
-                sync_google_calendar(
-                    &mut google_client,
-                    &google_args.sa_email,
-                    client,
-                    &mut google_classes,
-                )
-                .await;
-            }
-            for event in google_classes {
-                if let Err(e) = google_client.delete_event(&event.id).await {
-                    log::error!(
-                        "Could not delete Google event {} at {}: {}",
-                        event.summary(),
-                        event.start(),
-                        e
-                    );
-                } else {
-                    log::info!(
-                        "Deleted Google event {} at {}",
-                        event.summary(),
-                        event.start(),
-                    );
-                }
-            }
+            sync_google_calendar(&mut google_client, google_args.sa_email, &clients).await?;
         }
     }
     Ok(())
 }
 
-async fn sign_up<T>(client: T, classes: Vec<PotentialClass>, timezone: Tz)
+async fn sign_up<T>(client: &T, config: &SignUpConfig)
 where
-    T: ClassCRUD,
+    T: StudioCRUD + ?Sized,
 {
+    let classes = config.classes(&client.name());
     for potential_class in classes {
         match client.list_day_classes(&potential_class.start).await {
             Ok(classes) => {
@@ -116,25 +54,25 @@ where
                     if let Err(e) = client.sign_up_for_class(class).await {
                         log::error!(
                             "Could not sign up for {} class {} at {}: {}",
-                            T::name(),
+                            client.name(),
                             class.name,
-                            class.start.with_timezone(&timezone),
+                            class.start.with_timezone(&config.timezone),
                             e
                         );
                     }
                 } else {
                     log::error!(
                         "Could not find {} class {} at {}",
-                        T::name(),
+                        client.name(),
                         potential_class.name,
-                        potential_class.start.with_timezone(&timezone)
+                        potential_class.start.with_timezone(&config.timezone)
                     );
                 }
             }
             Err(err) => {
                 log::error!(
                     "Could not get {} classes for {}: {}",
-                    T::name(),
+                    client.name(),
                     potential_class.start,
                     err
                 );
@@ -143,52 +81,88 @@ where
     }
 }
 
-async fn sync_google_calendar<T>(
+async fn sync_google_calendar(
     google_client: &mut GoogleClient,
-    creator_email: &EmailAddress,
-    client: T,
-    google_classes: &mut Vec<GoogleEvent>,
-) where
-    T: ClassCRUD,
-{
-    if let Ok(classes) = client.get_user_classes().await {
-        *google_classes = google_classes
-            .iter()
-            .filter(|&g| !classes.iter().any(|h| h == g))
-            .cloned()
-            .collect();
-        let new_classes: Vec<&Class> = classes
-            .iter()
-            .filter(|&h| !google_classes.iter().any(|g| h == g))
-            .collect();
-        for class in new_classes {
-            if let Ok(event_matches) = google_client
-                .list_events(&class.to_google_list_params(creator_email))
-                .await
-            {
-                if event_matches.is_empty() {
-                    if let Ok(response) = google_client.create_event(&class.to_google_post()).await
-                    {
-                        log::info!(
-                            "Added {} at {} to calendar",
-                            response.summary.unwrap(),
-                            response.start.unwrap()
-                        );
-                    } else {
-                        log::error!(
-                            "Could not create Google event {} at {}",
-                            class.name,
-                            class.start
-                        );
-                    }
-                } else {
-                    log::debug!("{} already in calendar", class);
-                }
-            } else {
-                log::error!("Could not list Google events");
-            }
+    creator_email: EmailAddress,
+    clients: &Vec<Box<dyn StudioCRUD + Send + Sync>>,
+) -> AnyResult<()> {
+    let now = Utc::now();
+    let google_classes = google_client
+        .list_events(&GoogleEventListParams {
+            search_param: None,
+            start: Some(now),
+            end: Some(now + Duration::weeks(3)),
+            creator_email: Some(creator_email),
+        })
+        .await?;
+    let classes = get_all_classes(clients).await;
+    let (to_delete, to_add) = get_class_status(&google_classes, classes);
+
+    for class in to_add {
+        if let Ok(response) = google_client.create_event(&class.to_google_post()).await {
+            log::info!(
+                "Added {} at {} to calendar",
+                response.summary.unwrap(),
+                response.start.unwrap()
+            );
+        } else {
+            log::error!(
+                "Could not create Google event {} at {}",
+                class.name,
+                class.start
+            );
         }
-    } else {
-        log::error!("Could not get {} user classes", T::name(),);
     }
+    for event in to_delete {
+        if let Err(e) = google_client.delete_event(&event.id).await {
+            log::error!(
+                "Could not delete Google event {} at {}: {}",
+                event.summary(),
+                event.start(),
+                e
+            );
+        } else {
+            log::info!(
+                "Deleted Google event {} at {}",
+                event.summary(),
+                event.start(),
+            );
+        }
+    }
+    Ok(())
+}
+
+async fn get_all_classes(clients: &Vec<Box<dyn StudioCRUD + Send + Sync>>) -> Vec<Class> {
+    let mut classes = Vec::new();
+    for client in clients {
+        if let Ok(mut value) = client.get_user_classes().await {
+            if value.is_empty() {
+                log::info!("Nothing to do for {}", client.name());
+                continue;
+            }
+            classes.append(&mut value);
+        } else {
+            log::error!("Could not get {} user classes", client.name(),);
+        }
+    }
+    return classes;
+}
+
+/// Seperate classes into sets of (google_classes-{studio_classes}, studio_classes-{google_classes})
+/// google_classes-{studio_classes} are the classes that need to be deleted from Google Calendar
+/// studio_classes-{google_classes} are the classes that need to be added to Google Calendar
+fn get_class_status(
+    google_classes: &Vec<GoogleEvent>,
+    studio_classes: Vec<Class>,
+) -> (Vec<GoogleEvent>, Vec<Class>) {
+    let to_delete: Vec<GoogleEvent> = google_classes
+        .iter()
+        .filter(|&google| !studio_classes.iter().any(|studio| studio == google))
+        .cloned()
+        .collect();
+    let to_add = studio_classes
+        .into_iter()
+        .filter(|studio| !google_classes.iter().any(|google| studio == google))
+        .collect();
+    return (to_delete, to_add);
 }

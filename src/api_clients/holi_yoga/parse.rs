@@ -42,8 +42,16 @@ pub fn parse_user_classes(
         .unwrap();
 
         let name_element = get_element(&class_element, CLASS_NAME_CSS_SELECTOR, "class name")?;
-        let class_name: String =
-            serde_json::from_str(&format!("\"{}\"", name_element.inner_html().trim())).unwrap();
+        let class_name = format!(
+            "{}",
+            name_element
+                .inner_html()
+                .split("<br>")
+                .collect::<Vec<&str>>()
+                .first()
+                .unwrap()
+                .trim()
+        );
 
         let instructor_element = get_element(
             &class_element,

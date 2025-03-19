@@ -75,16 +75,17 @@ pub struct GoogleArguments {
 #[derive(Debug, Args)]
 pub struct HoliYogaArguments {
     /// Holi Yoga username (phone number like 79123456789)
-    #[arg(id = "holi-user", env = "GCU__HOLI_USERNAME")]
+    #[arg(id = "holi-user", env = "GCU__HOLI_USERNAME", required = false)]
     username: String,
     /// Holi Yoga password
-    #[arg(id = "holi-password", env = "GCU__HOLI_PASSWORD")]
+    #[arg(id = "holi-password", env = "GCU__HOLI_PASSWORD", required = false)]
     password: String,
     /// Holi Yoga api key (api_key in request forms)
     #[arg(
         id = "holi-api-key",
         env = "GCU__HOLI_API_KEY",
         default_value = DEFAULT_HOLI_API_KEY,
+        required = false
     )]
     api_key: Uuid,
     /// Holi Yoga club id
@@ -92,6 +93,7 @@ pub struct HoliYogaArguments {
         id = "holi-club-id",
         env = "GCU__HOLI_CLUB_ID",
         default_value = DEFAULT_HOLI_CLUB_ID,
+        required = false,
     )]
     club_id: Uuid,
 }
@@ -99,10 +101,16 @@ pub struct HoliYogaArguments {
 #[derive(Debug, Args)]
 pub struct PlastilinArguments {
     /// Token for authorization
-    #[arg(id = "plastilin-token", env = "GCU__PLASTILIN_TOKEN")]
+    #[arg(id = "plastilin-token", env = "GCU__PLASTILIN_TOKEN", required = false)]
     token: String,
     /// Plastilin club id
-    #[arg(id = "plastilin-club-id", env = "GCU__PLASTILIN_CLUB_ID", default_value = DEFAULT_PLASTILIN_CLUB_ID, index = 6)]
+    #[arg(
+        id = "plastilin-club-id",
+        env = "GCU__PLASTILIN_CLUB_ID",
+        default_value = DEFAULT_PLASTILIN_CLUB_ID,
+        index = 6,
+        required = false
+    )]
     club_id: u16,
 }
 

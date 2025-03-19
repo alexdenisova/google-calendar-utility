@@ -96,7 +96,7 @@ impl ClassCRUD for PlastilinClient {
     fn name() -> String {
         "Plastilin".to_owned()
     }
-    
+
     async fn get_user_classes(&self) -> Result<Vec<Class>, ClientError> {
         Ok(self
             .list_user_classes()

@@ -110,31 +110,35 @@ where
     T: ClassCRUD,
 {
     for potential_class in classes {
-        if let Ok(classes) = client.list_day_classes(&potential_class.start).await {
-            if let Some(class) = classes.iter().find(|x| potential_class.eq(x)) {
-                if let Err(e) = client.sign_up_for_class(class).await {
+        match client.list_day_classes(&potential_class.start).await {
+            Ok(classes) => {
+                if let Some(class) = classes.iter().find(|x| potential_class.eq(x)) {
+                    if let Err(e) = client.sign_up_for_class(class).await {
+                        log::error!(
+                            "Could not sign up for {} class {} at {}: {}",
+                            T::name(),
+                            class.name,
+                            class.start.with_timezone(&timezone),
+                            e
+                        );
+                    }
+                } else {
                     log::error!(
-                        "Could not sign up for {} class {} at {}: {}",
+                        "Could not find {} class {} at {}",
                         T::name(),
-                        class.name,
-                        class.start.with_timezone(&timezone),
-                        e
+                        potential_class.name,
+                        potential_class.start.with_timezone(&timezone)
                     );
                 }
-            } else {
+            }
+            Err(err) => {
                 log::error!(
-                    "Could not find {} class {} at {}",
+                    "Could not get {} classes for {}: {}",
                     T::name(),
-                    potential_class.name,
-                    potential_class.start.with_timezone(&timezone)
+                    potential_class.start,
+                    err
                 );
             }
-        } else {
-            log::error!(
-                "Could not get {} classes for {}",
-                T::name(),
-                potential_class.start
-            );
         }
     }
 }

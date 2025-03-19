@@ -96,9 +96,9 @@ pub struct HoliUserClassResponse {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HoliClubInfo {
-    pub id: Uuid,
-    #[serde(rename = "title")]
-    pub name: String,
+    // pub id: Uuid,
+    // #[serde(rename = "title")]
+    // pub name: String,
     pub time_zone: String,
 }
 

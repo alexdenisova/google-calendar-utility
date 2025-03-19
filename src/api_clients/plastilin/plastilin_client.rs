@@ -1,10 +1,11 @@
+use async_trait::async_trait;
 use chrono::{Datelike, NaiveDate, TimeDelta};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::Url;
 use reqwest::{Client, ClientBuilder};
 
 use crate::api_clients::models::{Class, UtcDateTime};
-use crate::api_clients::ClassCRUD;
+use crate::api_clients::StudioCRUD;
 
 use super::api_models::{ClassResponse, PostUserClass, ScheduleResponse, UserClassListResponse};
 use crate::api_clients::errors::{ClientError, ToClientError};
@@ -92,8 +93,9 @@ impl PlastilinClient {
     }
 }
 
-impl ClassCRUD for PlastilinClient {
-    fn name() -> String {
+#[async_trait]
+impl StudioCRUD for PlastilinClient {
+    fn name(&self) -> String {
         "Plastilin".to_owned()
     }
 

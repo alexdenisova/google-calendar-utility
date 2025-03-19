@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Datelike, Duration, Local, NaiveTime, TimeZone, Utc, Weekday};
 use chrono_tz::Tz;
+use convert_case::{Case, Casing};
 use serde::Deserialize;
 
 use crate::api_clients::models::Class;
@@ -14,9 +17,7 @@ pub struct SignUpConfig {
     #[serde(default)]
     pub offset_weeks: u8, // sign up to classes that will be in <offset_weeks> weeks
     #[serde(default)]
-    pub holi_yoga: Vec<WeeklyClass>,
-    #[serde(default)]
-    pub plastilin: Vec<WeeklyClass>,
+    classes: HashMap<String, Vec<WeeklyClass>>, // map of <Studio, List of Classes>
 }
 
 fn default_tz() -> Tz {
@@ -44,34 +45,32 @@ impl PotentialClass {
 }
 
 impl SignUpConfig {
-    pub fn holi_classes(&self) -> Vec<PotentialClass> {
-        self.classes(&self.holi_yoga)
-    }
-    pub fn plastilin_classes(&self) -> Vec<PotentialClass> {
-        self.classes(&self.plastilin)
-    }
-    fn classes(&self, weekly_classes: &[WeeklyClass]) -> Vec<PotentialClass> {
-        weekly_classes
-            .iter()
-            .map(|class| {
-                let today = Local::now();
-                let classdate = (today
-                    + Duration::days(
-                        (7 * u32::from(self.offset_weeks) + 6
-                            - today.weekday().pred().days_since(class.weekday))
-                        .into(),
-                    ))
-                .date_naive();
-                let classdatetime: DateTime<Utc> = self
-                    .timezone
-                    .from_local_datetime(&classdate.and_time(class.start_time))
-                    .unwrap()
-                    .with_timezone(&Utc);
-                PotentialClass {
-                    name: class.name.clone(),
-                    start: classdatetime,
-                }
-            })
-            .collect()
+    pub fn classes(&self, studio: &str) -> Vec<PotentialClass> {
+        let mut result = Vec::new();
+        if let Some(classes) = self.classes.get(&studio.to_case(Case::Camel)) {
+            result = classes
+                .iter()
+                .map(|class| {
+                    let today = Local::now();
+                    let classdate = (today
+                        + Duration::days(
+                            (7 * u32::from(self.offset_weeks) + 6
+                                - today.weekday().pred().days_since(class.weekday))
+                            .into(),
+                        ))
+                    .date_naive();
+                    let classdatetime: DateTime<Utc> = self
+                        .timezone
+                        .from_local_datetime(&classdate.and_time(class.start_time))
+                        .unwrap()
+                        .with_timezone(&Utc);
+                    PotentialClass {
+                        name: class.name.clone(),
+                        start: classdatetime,
+                    }
+                })
+                .collect()
+        }
+        return result;
     }
 }

@@ -1,6 +1,7 @@
 use crate::api_clients::errors::ClientError;
 use crate::api_clients::holi_yoga::holi_client::HoliClient;
 use crate::api_clients::plastilin::plastilin_client::PlastilinClient;
+use crate::api_clients::StudioCRUD;
 use crate::models::SignUpConfig;
 use camino::Utf8PathBuf;
 use chrono::prelude::Local;
@@ -179,13 +180,23 @@ impl Cli {
         .apply()?;
         Ok(())
     }
-    pub async fn holi_client(&self) -> Result<Option<HoliClient>, ClientError> {
+    pub async fn clients(&self) -> Result<Vec<Box<dyn StudioCRUD + Send + Sync>>, ClientError> {
+        let mut clients: Vec<Box<dyn StudioCRUD + Send + Sync>> = Vec::new();
+        if let Some(client) = self.holi_client().await? {
+            clients.push(Box::new(client));
+        }
+        if let Some(client) = self.plastilin_client()? {
+            clients.push(Box::new(client));
+        }
+        return Ok(clients);
+    }
+    async fn holi_client(&self) -> Result<Option<HoliClient>, ClientError> {
         Ok(match &self.holi_yoga {
             Some(args) => Some(args.client().await?),
             None => None,
         })
     }
-    pub fn plastilin_client(&self) -> Result<Option<PlastilinClient>, ClientError> {
+    fn plastilin_client(&self) -> Result<Option<PlastilinClient>, ClientError> {
         Ok(match &self.plastilin {
             Some(args) => Some(args.client()?),
             None => None,

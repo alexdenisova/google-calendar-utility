@@ -1,6 +1,6 @@
 [package]
 name = "google-calendar-utility"
-version = "24.10.2"
+version = "25.3.0"
 edition = "2021"
 
 [[bin]]

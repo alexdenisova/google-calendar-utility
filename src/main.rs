@@ -47,6 +47,7 @@ where
     T: StudioCRUD + ?Sized,
 {
     let classes = config.classes(&client.name());
+    log::debug!("Classes in config: {:?}", classes);
     for potential_class in classes {
         match client.list_day_classes(&potential_class.start).await {
             Ok(classes) => {

@@ -625,7 +625,7 @@ dependencies = [
 
 [[package]]
 name = "google-calendar-utility"
-version = "25.3.1"
+version = "25.5.0"
 dependencies = [
  "async-trait",
  "camino",

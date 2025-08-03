@@ -4,7 +4,7 @@ use chrono::{DateTime, Local, Utc};
 use email_address::EmailAddress;
 use google_api::models::{GoogleEvent, GoogleEventListParams, GoogleEventPost};
 
-pub type UtcDateTime = DateTime<Utc>;
+pub type UtcDateTime = DateTime<chrono_tz::Europe::Moscow>;
 
 #[derive(Debug, Clone)]
 pub struct Class {
@@ -43,7 +43,9 @@ impl Display for Class {
             f,
             "{} at {}",
             self.name,
-            self.start.with_timezone(&Local).format("%d.%m.%Y %H:%M")
+            self.start
+                .with_timezone(&chrono_tz::Europe::Moscow)
+                .format("%d.%m.%Y %H:%M")
         )
     }
 }
@@ -66,4 +68,12 @@ impl Class {
             creator_email: Some(creator_email.to_owned()),
         }
     }
+
+    // pub fn to_string(&self) -> String {
+    //     format!("{} at {}",
+    //         self.name,
+    //         self.start
+    //             .with_timezone(&chrono_tz::Europe::Moscow)
+    //             .format("%d.%m.%Y %H:%M"))
+    // }
 }

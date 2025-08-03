@@ -109,25 +109,19 @@ async fn sign_up<T>(client: T, classes: Vec<PotentialClass>, timezone: Tz)
 where
     T: ClassCRUD,
 {
+    let current_classes = client.get_user_classes().await.unwrap_or(Vec::new());
     for potential_class in classes {
         if let Ok(classes) = client.list_day_classes(&potential_class.start).await {
             if let Some(class) = classes.iter().find(|x| potential_class.eq(x)) {
+                if current_classes.iter().any(|x| class.eq(x)) {
+                    log::info!("Already signed up for {} class {}", T::name(), class);
+                    continue;
+                }
                 if let Err(e) = client.sign_up_for_class(class).await {
-                    log::error!(
-                        "Could not sign up for {} class {} at {}: {}",
-                        T::name(),
-                        class.name,
-                        class.start.with_timezone(&timezone),
-                        e
-                    );
+                    log::error!("Could not sign up for {} class {}: {}", T::name(), class, e);
                 }
             } else {
-                log::error!(
-                    "Could not find {} class {} at {}",
-                    T::name(),
-                    potential_class.name,
-                    potential_class.start.with_timezone(&timezone)
-                );
+                log::error!("Could not find {} class {}", T::name(), potential_class,);
             }
         } else {
             log::error!(

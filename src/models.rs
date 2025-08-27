@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use chrono::{DateTime, Datelike, Duration, Local, NaiveTime, TimeZone, Utc, Weekday};
 use chrono_tz::Tz;
@@ -41,6 +41,17 @@ pub struct PotentialClass {
 impl PotentialClass {
     pub fn eq(&self, class: &Class) -> bool {
         self.name.to_uppercase() == class.name.to_uppercase() && self.start == class.start
+    }
+}
+
+impl Display for PotentialClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} at {}",
+            self.name,
+            self.start.with_timezone(&Local).format("%d.%m.%Y %H:%M")
+        )
     }
 }
 

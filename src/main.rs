@@ -12,7 +12,7 @@ use dotenvy::dotenv;
 use email_address::EmailAddress;
 use models::SignUpConfig;
 
-use api_clients::{models::Class, StudioCRUD};
+use api_clients::{errors::ClientError, models::Class, StudioCRUD};
 use google_api::{
     models::{GoogleEvent, GoogleEventListParams},
     GoogleClient,
@@ -54,21 +54,19 @@ where
             Ok(classes) => {
                 if let Some(class) = classes.iter().find(|x| potential_class.eq(x)) {
                     if let Err(e) = client.sign_up_for_class(class).await {
-                        log::error!(
-                            "Could not sign up for {} class {} at {}: {}",
-                            client.name(),
-                            class.name,
-                            class.start.with_timezone(&config.timezone),
-                            e
-                        );
+                        if let ClientError::AlreadyExists { id: _ } = e {
+                            log::info!("Already signed up for {} class {}", client.name(), class);
+                        } else {
+                            log::error!(
+                                "Could not sign up for {} class {}: {}",
+                                client.name(),
+                                class,
+                                e
+                            );
+                        }
                     }
                 } else {
-                    log::error!(
-                        "Could not find {} class {} at {}",
-                        client.name(),
-                        potential_class.name,
-                        potential_class.start.with_timezone(&config.timezone)
-                    );
+                    log::error!("Could not find {} class {}", client.name(), potential_class);
                 }
             }
             Err(err) => {

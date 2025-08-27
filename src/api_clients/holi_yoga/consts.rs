@@ -1,5 +1,6 @@
 pub const CLASSES_CSS_SELECTOR: &str = ".list-history_rz:not([data-history-list])";
 pub const CLASS_CSS_SELECTOR: &str = ".item-hist_rz";
+pub const CLASS_ID_ATTR: &str = "data-id";
 pub const CLASS_ID_CSS_SELECTOR: &str = "[data-id]";
 pub const CLASS_NAME_CSS_SELECTOR: &str = ".group-name_rz";
 pub const CLASS_INSTRUCTOR_CSS_SELECTOR: &str = ".name-hist_rz";

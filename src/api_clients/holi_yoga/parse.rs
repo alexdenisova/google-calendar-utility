@@ -2,7 +2,7 @@ use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use scraper::{ElementRef, Html, Selector};
 
 use crate::api_clients::holi_yoga::consts::{
-    CLASS_INSTRUCTOR_CSS_SELECTOR, SCHEDULE_CLASS_INSTRUCTOR_CSS_SELECTOR,
+    CLASS_ID_ATTR, CLASS_INSTRUCTOR_CSS_SELECTOR, SCHEDULE_CLASS_INSTRUCTOR_CSS_SELECTOR,
     SCHEDULE_CLASS_NAME_CSS_SELECTOR, SCHEDULE_CLASS_TIME_CSS_SELECTOR,
 };
 use crate::api_clients::models::{Class, UtcDateTime};
@@ -33,10 +33,10 @@ pub fn parse_user_classes(
         let class_id: String = serde_json::from_str(&format!(
             "\"{}\"",
             id_element
-                .attr("data-id")
+                .attr(CLASS_ID_ATTR)
                 .ok_or(ClassParseError::MissingHtmlAttribute {
                     css_selector: CLASS_ID_CSS_SELECTOR.to_owned(),
-                    attribute: "data-id".to_owned()
+                    attribute: CLASS_ID_ATTR.to_owned()
                 })?
         ))
         .unwrap();
@@ -123,71 +123,79 @@ pub fn parse_schedule(
 
     let class_selector = Selector::parse("tr").unwrap();
     let mut classes = Vec::new();
-    for class_element in classes_element.select(&class_selector) {
-        let id_element = get_element(&class_element, CLASS_ID_CSS_SELECTOR, "class id")?;
-        let class_id: String = serde_json::from_str(&format!(
-            "\"{}\"",
-            id_element
-                .attr("data-id")
-                .ok_or(ClassParseError::MissingHtmlAttribute {
-                    css_selector: CLASS_ID_CSS_SELECTOR.to_owned(),
-                    attribute: "data-id".to_owned()
-                })?
-        ))
-        .unwrap();
-
-        let name_element = get_element(
-            &class_element,
-            SCHEDULE_CLASS_NAME_CSS_SELECTOR,
-            "class name",
-        )?;
-        let class_name: String = serde_json::from_str(&format!(
-            "\"{}\"",
-            name_element.inner_html().trim().replace("&amp;", "&")
-        ))
-        .unwrap();
-
-        let instructor_element = get_element(
-            &class_element,
-            SCHEDULE_CLASS_INSTRUCTOR_CSS_SELECTOR,
-            "class instructor",
-        )?;
-        let instructor: String =
-            serde_json::from_str(&format!("\"{}\"", instructor_element.inner_html().trim()))
-                .unwrap();
-
-        let time = get_element(
-            &class_element,
-            SCHEDULE_CLASS_TIME_CSS_SELECTOR,
-            "class time",
-        )?
-        .inner_html();
-        let time = time.trim();
-
-        let (start_time, end_time) = time.split_once('-').ok_or(ClassParseError::WrongFormat {
-            field: "time".to_owned(),
-            expected: "start-end".to_owned(),
-        })?;
-
-        let start =
-            NaiveDateTime::parse_from_str(&format!("{date} {start_time}:00"), "%Y-%m-%d %H:%M:%S")?;
-        let start = naivedate_to_utc(&start, time_zone);
-
-        let end =
-            NaiveDateTime::parse_from_str(&format!("{date} {end_time}:00"), "%Y-%m-%d %H:%M:%S")?;
-        let end = naivedate_to_utc(&end, time_zone);
-
-        let class = Class {
-            id: class_id,
-            name: class_name,
-            instructor,
-            start,
-            end,
-        };
-        log::debug!("Parsed class: {}", class);
-        classes.push(class);
+    for tr_element in classes_element.select(&class_selector) {
+        let ul_elements = get_elements(&tr_element, CLASS_ID_CSS_SELECTOR);
+        for class_element in ul_elements {
+            classes.push(parse_schedule_class(&class_element, &date, time_zone)?);
+        }
     }
     Ok(classes)
+}
+
+fn parse_schedule_class(
+    class_element: &ElementRef,
+    date: &NaiveDate,
+    time_zone: chrono_tz::Tz,
+) -> Result<Class, ClassParseError<'static>> {
+    let class_id: String = serde_json::from_str(&format!(
+        "\"{}\"",
+        class_element
+            .attr(CLASS_ID_ATTR)
+            .ok_or(ClassParseError::MissingHtmlAttribute {
+                css_selector: CLASS_ID_CSS_SELECTOR.to_owned(),
+                attribute: CLASS_ID_ATTR.to_owned()
+            })?
+    ))
+    .unwrap();
+
+    let name_element = get_element(
+        class_element,
+        SCHEDULE_CLASS_NAME_CSS_SELECTOR,
+        "class name",
+    )?;
+    let class_name: String = serde_json::from_str(&format!(
+        "\"{}\"",
+        name_element.inner_html().trim().replace("&amp;", "&")
+    ))
+    .unwrap();
+
+    let instructor_element = get_element(
+        class_element,
+        SCHEDULE_CLASS_INSTRUCTOR_CSS_SELECTOR,
+        "class instructor",
+    )?;
+    let instructor: String =
+        serde_json::from_str(&format!("\"{}\"", instructor_element.inner_html().trim())).unwrap();
+
+    let time = get_element(
+        class_element,
+        SCHEDULE_CLASS_TIME_CSS_SELECTOR,
+        "class time",
+    )?
+    .inner_html();
+    let time = time.trim();
+
+    let (start_time, end_time) = time.split_once('-').ok_or(ClassParseError::WrongFormat {
+        field: "time".to_owned(),
+        expected: "start-end".to_owned(),
+    })?;
+
+    let start =
+        NaiveDateTime::parse_from_str(&format!("{date} {start_time}:00"), "%Y-%m-%d %H:%M:%S")?;
+    let start = naivedate_to_utc(&start, time_zone);
+
+    let end = NaiveDateTime::parse_from_str(&format!("{date} {end_time}:00"), "%Y-%m-%d %H:%M:%S")?;
+    let end = naivedate_to_utc(&end, time_zone);
+
+    let class = Class {
+        id: class_id,
+        name: class_name,
+        instructor,
+        start,
+        end,
+    };
+    log::debug!("Parsed class: {}", class);
+    Ok(class)
 }
 
 fn get_element<'a>(
@@ -195,13 +203,19 @@ fn get_element<'a>(
     selector: &'static str,
     field: &str,
 ) -> Result<ElementRef<'a>, ClassParseError<'static>> {
-    element
-        .select(&Selector::parse(selector).unwrap())
-        .next()
+    get_elements(element, selector)
+        .first()
+        .copied()
         .ok_or(ClassParseError::MissingCssSelector {
             field: field.to_owned(),
             css_selector: selector,
         })
+}
+
+fn get_elements<'a>(element: &'a ElementRef, selector: &'static str) -> Vec<ElementRef<'a>> {
+    element
+        .select(&Selector::parse(selector).unwrap())
+        .collect::<Vec<ElementRef>>()
 }
 
 fn naivedate_to_utc(naive: &NaiveDateTime, time_zone: chrono_tz::Tz) -> UtcDateTime {
